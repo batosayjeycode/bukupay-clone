@@ -1,0 +1,292 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum KycStatus {
+  PENDING
+  SUBMITTED
+  VERIFIED
+  REJECTED
+}
+
+enum Role {
+  OWNER
+  EMPLOYEE
+  ADMIN
+}
+
+enum TxStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum SettleStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Phase 2: Settlement type (scheduled 3x/hari vs instant H+0)
+enum SettleType {
+  SCHEDULED
+  INSTANT
+}
+
+// ============================================================
+// Models
+// ============================================================
+
+model User {
+  id            String         @id @default(uuid())
+  phone         String         @unique
+  email         String?
+  fullName      String?
+  kycStatus     KycStatus      @default(PENDING)
+  role          Role           @default(OWNER)
+  isActive      Boolean        @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  stores        Store[]
+  refreshTokens RefreshToken[]
+  kycDocument   KycDocument?
+  bankAccounts  BankAccount[]
+  fcmTokens     FcmToken[]
+  instantSettlements Settlement[] @relation("RequestedBy") // Phase 2
+
+  @@index([phone])
+  @@index([kycStatus])
+  @@index([role]) // Phase 2: Admin query
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Store {
+  id           String         @id @default(uuid())
+  name         String
+  address      String
+  city         String
+  province     String?
+  postalCode   String?
+  category     String?        // e.g., "kuliner", "retail", "jasa"
+  ownerId      String
+  owner        User           @relation(fields: [ownerId], references: [id])
+  qrisCode     String?        @unique // QRIS string dari Xendit
+  qrisImageUrl String?        // URL gambar QR code
+  xenditQrisId String?        // ID dari Xendit
+  isActive     Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // Relations
+  transactions Transaction[]
+  employees    StoreEmployee[]
+  settlements  Settlement[]
+  soundboxes   SoundboxDevice[] // Phase 2
+
+  @@index([ownerId])
+  @@index([isActive])
+}
+
+// Phase 2: Extend StoreEmployee dengan permissions, PIN, invite
+model StoreEmployee {
+  id           String    @id @default(uuid())
+  storeId      String
+  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId       String
+  role         Role      @default(EMPLOYEE)
+
+  // Phase 2 fields
+  permissions  Json?     // { canRefund: true, canViewReport: false, canManageEmployees: false }
+  pinHash      String?   // PIN 6 digit (bcrypt) untuk KasirMode
+  inviteToken  String?   @unique
+  inviteExpiry DateTime?
+  invitedBy    String?   // userId pemilik yang mengundang
+  joinedAt     DateTime?
+
+  createdAt    DateTime  @default(now())
+
+  @@unique([storeId, userId])
+  @@index([storeId])
+  @@index([userId])
+  @@index([inviteToken]) // Phase 2: cepat cari invite
+}
+
+model Transaction {
+  id          String    @id @default(uuid())
+  storeId     String
+  store       Store     @relation(fields: [storeId], references: [id])
+  amount      Int       // dalam rupiah (integer)
+  fee         Int       @default(0) // MDR fee
+  netAmount   Int       // amount - fee
+  status      TxStatus  @default(PENDING)
+  referenceNo String?   // RRN dari Xendit / acquirer
+  xenditId    String?   @unique // Xendit QR payment ID
+  payerInfo   Json?     // info pembayar jika tersedia
+  description String?
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([storeId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([xenditId])
+  @@index([storeId, status]) // Phase 2: composite untuk report
+  @@index([storeId, paidAt]) // Phase 2: date range report
+}
+
+// Phase 2: Extend Settlement dengan type INSTANT + requestedBy
+model Settlement {
+  id            String       @id @default(uuid())
+  storeId       String
+  store         Store        @relation(fields: [storeId], references: [id])
+  amount        Int          // total yang dicairkan
+  fee           Int          @default(0) // biaya pencairan (Rp 2.500 untuk instant)
+  netAmount     Int          // amount - fee
+  status        SettleStatus @default(PENDING)
+  type          SettleType   @default(SCHEDULED) // Phase 2: SCHEDULED | INSTANT
+  bankCode      String
+  bankAccount   String
+  accountName   String
+  xenditDisbId  String?      // Xendit disbursement ID
+  scheduledAt   DateTime
+  processedAt   DateTime?
+  failReason    String?
+
+  // Phase 2: siapa yang request (untuk instant)
+  requestedById String?
+  requestedBy   User?        @relation("RequestedBy", fields: [requestedById], references: [id])
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([storeId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([type])             // Phase 2: filter instant vs scheduled
+  @@index([storeId, status, scheduledAt]) // Phase 2: composite report
+}
+
+model BankAccount {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankCode    String   // e.g., "BCA", "MANDIRI", "BRI"
+  bankName    String
+  accountNo   String
+  accountName String
+  isPrimary   Boolean  @default(false)
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, accountNo, bankCode])
+  @@index([userId])
+}
+
+model KycDocument {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ktpUrl      String    // S3 URL
+  selfieUrl   String    // S3 URL
+  nik         String?   // dari OCR
+  fullName    String?   // dari OCR
+  dob         String?   // dari OCR, format: DD-MM-YYYY
+  address     String?   // dari OCR
+  verihubsRef String?   // reference ID dari Verihubs
+  similarity  Float?    // face match similarity score
+  status      KycStatus @default(PENDING)
+  reviewNote  String?   // catatan rejection
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model FcmToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  device    String?  // "android" | "ios"
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ============================================================
+// Phase 2: New Models
+// ============================================================
+
+// MQTT Soundbox Device (white-label hardware dari vendor China)
+model SoundboxDevice {
+  id           String    @id @default(uuid())
+  storeId      String
+  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  deviceId     String    @unique  // MAC address perangkat
+  name         String             // "Kasir 1", "Meja Depan", dst
+  firmwareVer  String?            // versi firmware saat ini
+  volume       Int       @default(80)   // 0-100
+  isOnline     Boolean   @default(false)
+  lastSeenAt   DateTime?
+
+  // MQTT credentials unik per perangkat
+  mqttUsername String?   @unique
+  mqttPassHash String?   // bcrypt hash
+
+  // Metadata white-label
+  model        String?   // "SB-100", "SB-200"
+  serialNo     String?   // nomor seri dari vendor
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([storeId])
+  @@index([isOnline])
+  @@index([deviceId])
+}
+
+// Admin Panel: log aktivitas untuk audit trail
+model AdminLog {
+  id         String   @id @default(uuid())
+  adminId    String   // userId admin
+  action     String   // "SUSPEND_MERCHANT", "APPROVE_KYC", dll
+  targetType String?  // "USER", "STORE", "TRANSACTION"
+  targetId   String?
+  metadata   Json?    // detail aksi
+  createdAt  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([createdAt])
+  @@index([targetType, targetId])
+}

@@ -1,0 +1,65 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: bukupay_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bukupay
+      POSTGRES_PASSWORD: bukupay123
+      POSTGRES_DB: bukupay
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U bukupay -d bukupay']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bukupay_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Phase 2: MQTT Broker untuk Soundbox
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: bukupay_mosquitto
+    restart: unless-stopped
+    ports:
+      - '1883:1883'   # MQTT plaintext (dev only)
+      - '9001:9001'   # WebSocket
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./docker/mosquitto/passwd:/mosquitto/config/passwd
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    healthcheck:
+      test: ['CMD-SHELL', 'mosquitto_sub -t "health" -C 1 -E -u backend -P bukupay_mqtt || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  mosquitto_data:
+  mosquitto_logs:
+
+networks:
+  default:
+    name: bukupay_network

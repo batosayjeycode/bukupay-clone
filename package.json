@@ -1,0 +1,40 @@
+{
+  "name": "bukupay-clone",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "dev:mobile": "npm run android --workspace=apps/mobile",
+    "lint": "eslint \"apps/**/*.{js,jsx}\" \"packages/**/*.{js,jsx}\"",
+    "lint:fix": "eslint --fix \"apps/**/*.{js,jsx}\" \"packages/**/*.{js,jsx}\"",
+    "format": "prettier --write \"apps/**/*.{js,jsx,json}\" \"packages/**/*.{js,jsx,json}\"",
+    "format:check": "prettier --check \"apps/**/*.{js,jsx,json}\" \"packages/**/*.{js,jsx,json}\"",
+    "test": "npm run test --workspaces --if-present",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.0",
+    "eslint-plugin-react-native": "^4.1.0",
+    "prettier": "^3.2.5",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2"
+  },
+  "lint-staged": {
+    "*.{js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
