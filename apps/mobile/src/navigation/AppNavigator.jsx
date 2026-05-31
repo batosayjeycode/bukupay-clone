@@ -1,18 +1,28 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Screens
+// Screens — Phase 1
 import HomeScreen from '../screens/home/HomeScreen';
 import TransactionListScreen from '../screens/transaction/TransactionListScreen';
 import TransactionDetailScreen from '../screens/transaction/TransactionDetailScreen';
 import SettlementScreen from '../screens/settlement/SettlementScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 
+// Screens — Phase 2
+import EmployeeListScreen from '../screens/employee/EmployeeListScreen';
+import InviteEmployeeScreen from '../screens/employee/InviteEmployeeScreen';
+import KasirModeScreen from '../screens/employee/KasirModeScreen';
+import SoundboxListScreen from '../screens/soundbox/SoundboxListScreen';
+import SoundboxPairScreen from '../screens/soundbox/SoundboxPairScreen';
+
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
 const TxStack = createNativeStackNavigator();
+const SettleStack = createNativeStackNavigator();
+const ProfileStack = createNativeStackNavigator();
 
 // Tab icon component
 function TabIcon({ icon, label, focused }) {
@@ -24,11 +34,17 @@ function TabIcon({ icon, label, focused }) {
   );
 }
 
-// Home Stack
+// Home Stack — tambah Phase 2 screens
 function HomeStackNavigator() {
   return (
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
+      {/* Phase 2 */}
+      <HomeStack.Screen name="EmployeeList" component={EmployeeListScreen} />
+      <HomeStack.Screen name="InviteEmployee" component={InviteEmployeeScreen} />
+      <HomeStack.Screen name="KasirMode" component={KasirModeScreen} />
+      <HomeStack.Screen name="SoundboxList" component={SoundboxListScreen} />
+      <HomeStack.Screen name="SoundboxPair" component={SoundboxPairScreen} />
     </HomeStack.Navigator>
   );
 }
@@ -43,12 +59,39 @@ function TransactionStackNavigator() {
   );
 }
 
+// Settlement Stack
+function SettlementStackNavigator() {
+  return (
+    <SettleStack.Navigator screenOptions={{ headerShown: false }}>
+      <SettleStack.Screen name="SettlementMain" component={SettlementScreen} />
+    </SettleStack.Navigator>
+  );
+}
+
+// Profile Stack
+function ProfileStackNavigator() {
+  return (
+    <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
+      <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} />
+    </ProfileStack.Navigator>
+  );
+}
+
 export default function AppNavigator() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          // iOS: tambah safe area bottom untuk notch devices
+          Platform.OS === 'ios' && {
+            height: 60 + insets.bottom,
+            paddingBottom: insets.bottom + 4,
+          },
+        ],
         tabBarShowLabel: false,
       }}
     >
@@ -72,7 +115,7 @@ export default function AppNavigator() {
       />
       <Tab.Screen
         name="SettlementTab"
-        component={SettlementScreen}
+        component={SettlementStackNavigator}
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon icon="💰" label="Pencairan" focused={focused} />
@@ -81,7 +124,7 @@ export default function AppNavigator() {
       />
       <Tab.Screen
         name="ProfileTab"
-        component={ProfileScreen}
+        component={ProfileStackNavigator}
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon icon="👤" label="Profil" focused={focused} />

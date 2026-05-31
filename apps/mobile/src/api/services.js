@@ -36,9 +36,35 @@ export const transactionApi = {
 export const settlementApi = {
   getBalance: () => api.get('/settlements/balance'),
   getHistory: (params) => api.get('/settlements', { params }),
+  // Phase 2: Pencairan Instan via Xendit Disbursement
+  requestInstant: (data) => api.post('/settlements/instant', data),
 };
 
 export const notificationApi = {
   registerToken: (token, device = 'android') =>
     api.post('/notification/register-token', { token, device }),
+};
+
+// ─── Phase 2 Services ────────────────────────────────────────────────────────
+
+export const apiService = {
+  employee: {
+    invite: (data) => api.post('/employee/invite', data),
+    join: (token) => api.post('/employee/join', { token }),
+    list: (storeId) => api.get(`/employee/list/${storeId}`),
+    updatePermissions: (id, permissions) => api.put(`/employee/${id}/permissions`, permissions),
+    setPin: (id, pin) => api.put(`/employee/${id}/pin`, { pin }),
+    pinLogin: (data) => api.post('/employee/pin-login', data),
+    remove: (id) => api.delete(`/employee/${id}`),
+    shiftSummary: (storeId) => api.get(`/employee/shift-summary/${storeId}`),
+  },
+
+  soundbox: {
+    register: (data) => api.post('/soundbox/register', data),
+    getDevices: (storeId) => api.get('/soundbox/devices', { params: { storeId } }),
+    updateDevice: (id, data) => api.put(`/soundbox/devices/${id}`, data),
+    testSound: (id) => api.post(`/soundbox/test/${id}`),
+    getCredentials: (id) => api.get(`/soundbox/credentials/${id}`),
+    delete: (id) => api.delete(`/soundbox/devices/${id}`),
+  },
 };
