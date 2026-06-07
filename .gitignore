@@ -56,3 +56,7 @@ jest.config.cache/
 
 # Docker
 *.pid
+.env                          # Docker compose env (dari .env.docker.example)
+docker/nginx/ssl/privkey.pem  # SSL private key (jangan commit!)
+docker/nginx/ssl/fullchain.pem
+docker/mosquitto/passwd       # Hashed MQTT credentials

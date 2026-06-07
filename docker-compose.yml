@@ -1,32 +1,61 @@
-version: '3.9'
+# ============================================================
+# BukuPay Clone — Full Docker Compose
+# Phase 1 + Phase 2 services all containerized
+#
+# Quick start:
+#   1. cp .env.docker.example .env      # edit credentials
+#   2. cp .env.example apps/backend/.env  # edit API keys
+#   3. touch apps/web/.env.local
+#   4. make setup                        # atau: docker-compose up -d
+#
+# Usage:
+#   Development:  docker-compose up -d
+#   Production:   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   Logs:         docker-compose logs -f [service]
+#   Stop all:     docker-compose down
+#   Destroy all:  docker-compose down -v  (deletes volumes!)
+# ============================================================
 
 services:
+
+  # ─────────────────────────────────────────────────
+  # 1. INFRASTRUCTURE SERVICES
+  # ─────────────────────────────────────────────────
+
   postgres:
     image: postgres:15-alpine
     container_name: bukupay_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: bukupay
-      POSTGRES_PASSWORD: bukupay123
-      POSTGRES_DB: bukupay
+      POSTGRES_USER: ${DB_USER:-bukupay}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-bukupay123}
+      POSTGRES_DB: ${DB_NAME:-bukupay}
     ports:
-      - '5432:5432'
+      - '${DB_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U bukupay -d bukupay']
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-bukupay} -d ${DB_NAME:-bukupay}']
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
+    networks:
+      - bukupay_internal
 
   redis:
     image: redis:7-alpine
     container_name: bukupay_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:-}
     ports:
-      - '6379:6379'
+      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -34,32 +63,192 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - bukupay_internal
 
-  # Phase 2: MQTT Broker untuk Soundbox
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: bukupay_mosquitto
     restart: unless-stopped
     ports:
-      - '1883:1883'   # MQTT plaintext (dev only)
-      - '9001:9001'   # WebSocket
+      - '${MQTT_PORT:-1883}:1883'         # MQTT plaintext (dev)
+      - '${MQTT_WS_PORT:-9001}:9001'      # WebSocket (Soundbox web config page)
     volumes:
-      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - ./docker/mosquitto/passwd:/mosquitto/config/passwd
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./docker/mosquitto/passwd:/mosquitto/config/passwd:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_logs:/mosquitto/log
     healthcheck:
-      test: ['CMD-SHELL', 'mosquitto_sub -t "health" -C 1 -E -u backend -P bukupay_mqtt || exit 1']
+      test: ['CMD-SHELL', 'mosquitto_pub -h localhost -t "health/check" -m "ping" -u ${MQTT_USERNAME:-backend} -P ${MQTT_PASSWORD:-bukupay_mqtt_change_this} || exit 0']
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
+    networks:
+      - bukupay_internal
+      - bukupay_external   # soundbox devices perlu akses dari luar
 
+  # ─────────────────────────────────────────────────
+  # 2. APPLICATION SERVICES
+  # ─────────────────────────────────────────────────
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      target: production
+    container_name: bukupay_backend
+    restart: unless-stopped
+    env_file:
+      - path: ./apps/backend/.env
+        required: false       # optional — fallback ke environment block di bawah
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      DATABASE_URL: postgresql://${DB_USER:-bukupay}:${DB_PASSWORD:-bukupay123}@postgres:5432/${DB_NAME:-bukupay}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379
+      MQTT_BROKER_URL: mqtt://mosquitto:1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-backend}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-bukupay_mqtt_change_this}
+    ports:
+      - '${BACKEND_PORT:-3000}:3000'
+    volumes:
+      - backend_logs:/app/apps/backend/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    networks:
+      - bukupay_internal
+      - bukupay_external
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: production
+    container_name: bukupay_web
+    restart: unless-stopped
+    env_file:
+      - ./apps/web/.env.local
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3001
+      # Internal API URL (container-to-container, no nginx hop)
+      INTERNAL_API_URL: http://backend:3000
+      # Public URL untuk browser-side calls
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change_this_secret}
+    ports:
+      - '${WEB_PORT:-3001}:3001'
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    networks:
+      - bukupay_internal
+      - bukupay_external
+
+  # ─────────────────────────────────────────────────
+  # 3. NGINX — Reverse Proxy + SSL Termination
+  # ─────────────────────────────────────────────────
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: bukupay_nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro    # mount SSL certs (self-signed for dev)
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - backend
+      - web
+    healthcheck:
+      test: ['CMD', 'nginx', '-t']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - bukupay_external
+
+  # ─────────────────────────────────────────────────
+  # 4. DATABASE MIGRATION JOB (runs once)
+  # ─────────────────────────────────────────────────
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      target: production
+    container_name: bukupay_migrate
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        until nc -z postgres 5432; do sleep 1; done &&
+        echo 'Running Prisma migrations...' &&
+        cd apps/backend &&
+        npx prisma migrate deploy &&
+        echo 'Migrations complete!'
+      "
+    env_file:
+      - ./apps/backend/.env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-bukupay}:${DB_PASSWORD:-bukupay123}@postgres:5432/${DB_NAME:-bukupay}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - bukupay_internal
+
+# ─────────────────────────────────────────────────
+# VOLUMES
+# ─────────────────────────────────────────────────
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   mosquitto_data:
+    driver: local
   mosquitto_logs:
+    driver: local
+  backend_logs:
+    driver: local
+  nginx_logs:
+    driver: local
 
+# ─────────────────────────────────────────────────
+# NETWORKS
+# ─────────────────────────────────────────────────
 networks:
-  default:
-    name: bukupay_network
+  # Internal: hanya container-to-container, tidak expose ke host
+  bukupay_internal:
+    driver: bridge
+    internal: true
+    name: bukupay_internal
+
+  # External: expose ke host network (nginx, soundbox)
+  bukupay_external:
+    driver: bridge
+    name: bukupay_external

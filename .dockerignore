@@ -1,0 +1,62 @@
+# Root .dockerignore — berlaku untuk semua build context di root
+# Ini melindungi dari menyalin file tidak perlu ke Docker build context
+
+# Version control
+.git
+.gitignore
+
+# Node modules (akan di-install di container)
+node_modules
+**/node_modules
+
+# Build artifacts
+dist
+build
+.next
+**/.next/cache
+
+# Development configs
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
+*.log
+logs/
+**/logs/
+
+# Test files
+coverage/
+**/coverage/
+**/*.test.js
+**/*.spec.js
+tests/
+**/tests/
+
+# Mobile app (tidak perlu di container)
+apps/mobile/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Docs
+*.md
+!README.md
+
+# Docker files themselves
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Artifacts / artifacts dirs
+artifacts/

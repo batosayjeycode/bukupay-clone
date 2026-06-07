@@ -1,0 +1,65 @@
+# Caddyfile — Production HTTPS dengan auto certificate (Let's Encrypt)
+# Digunakan via docker-compose.prod.yml sebagai alternatif nginx
+
+# Backend API
+api.bukupay.id {
+  reverse_proxy backend:3000 {
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up Host {host}
+  }
+
+  # Rate limiting untuk auth endpoints
+  route /api/auth/* {
+    rate_limit {remote_host} 5r/m
+    reverse_proxy backend:3000
+  }
+
+  # Webhook tidak di-rate-limit
+  route /webhooks/* {
+    reverse_proxy backend:3000 {
+      flush_interval -1  # streaming (untuk webhook delivery)
+    }
+  }
+
+  log {
+    output file /var/log/caddy/api.log
+    format json
+  }
+}
+
+# Web Dashboard
+dashboard.bukupay.id {
+  reverse_proxy web:3001 {
+    header_up X-Real-IP {remote_host}
+    header_up Host {host}
+  }
+
+  # Cache Next.js static files
+  @static path /_next/static/*
+  header @static Cache-Control "public, max-age=31536000, immutable"
+
+  log {
+    output file /var/log/caddy/web.log
+    format json
+  }
+}
+
+# Development: localhost (HTTP only)
+:80 {
+  # Redirect ke HTTPS (hanya di production)
+  # redir https://{host}{uri} permanent
+  
+  # Di dev: proxy langsung
+  handle /api/* {
+    reverse_proxy backend:3000
+  }
+
+  handle /webhooks/* {
+    reverse_proxy backend:3000
+  }
+
+  handle {
+    reverse_proxy web:3001
+  }
+}
