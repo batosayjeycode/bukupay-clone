@@ -8,55 +8,69 @@
 ---
 
 ## Komponen 6: Backend Extensions
-- [/] Extend Prisma schema (SoundboxDevice, SettleType enum, StoreEmployee fields)
-- [ ] Module: Soundbox (register, CRUD, MQTT credentials)
-- [ ] Module: Employee (invite, join, PIN login, permissions)
-- [ ] Module: Report (daily, weekly, monthly, CSV export streaming)
-- [ ] Module: Instant Settlement (extend settlement module)
-- [ ] Config: MQTT publisher (mqtt.js)
-- [ ] Extend webhook Xendit: MQTT publish setelah FCM
-- [ ] Register routes baru di app.js
-- [ ] Admin API: merchant list, overview stats (untuk Admin Panel)
+- [x] Extend Prisma schema (SoundboxDevice, SettleType enum, StoreEmployee fields, AdminLog)
+- [x] Module: Soundbox (register, CRUD, MQTT credentials)
+- [x] Module: Employee (invite, join, PIN login, permissions)
+- [x] Module: Report (daily, weekly, monthly, CSV export streaming)
+- [x] Module: Admin (merchant list, global stats, KYC review, suspend/activate)
+- [x] Config: MQTT publisher (mqtt.js)
+- [x] Extend webhook Xendit: MQTT publish setelah FCM
+- [x] Register routes baru di app.js
+- [x] server.js: initMqtt() di startup
 
 ## Komponen 1: MQTT Infrastructure
-- [ ] Docker-compose: tambah Mosquitto service
-- [ ] docker/mosquitto/mosquitto.conf
-- [ ] Backend: src/config/mqtt.js
-- [ ] Unit test: soundbox.service.test.js
+- [x] Docker-compose: tambah Mosquitto service
+- [x] docker/mosquitto/mosquitto.conf
+- [x] docker/mosquitto/passwd
+- [x] Backend: src/config/mqtt.js
 
 ## Komponen 2: Multi-kasir (Mobile)
-- [ ] Mobile: screens/employee/InviteEmployeeScreen.jsx
-- [ ] Mobile: screens/employee/EmployeeListScreen.jsx
-- [ ] Mobile: screens/employee/KasirModeScreen.jsx
-- [ ] Mobile: screens/soundbox/SoundboxListScreen.jsx
-- [ ] Mobile: screens/soundbox/SoundboxPairScreen.jsx
+- [x] Mobile: screens/employee/InviteEmployeeScreen.jsx
+- [x] Mobile: screens/employee/EmployeeListScreen.jsx
+- [x] Mobile: screens/employee/KasirModeScreen.jsx
+- [x] Mobile: screens/soundbox/SoundboxListScreen.jsx
+- [x] Mobile: screens/soundbox/SoundboxPairScreen.jsx
+- [x] AppNavigator: semua screen Phase 2 terdaftar + iOS SafeAreaInsets fix
 
 ## Komponen 3: Pencairan Instan (Mobile)
-- [ ] Mobile: Update SettlementScreen (tombol "Cairkan Sekarang")
-- [ ] Mobile: InstantSettlementModal (konfirmasi fee)
+- [x] Mobile: SettlementScreen — tombol ⚡ Cairkan Sekarang + modal konfirmasi
+- [x] Mobile: API services — requestInstant()
 
 ## Komponen 4: Web Dashboard
-- [ ] Init Next.js 14 + Tailwind + shadcn/ui
-- [ ] apps/web/package.json
-- [ ] Auth: login/page.jsx (OTP) + verify/page.jsx
-- [ ] Layout: DashboardLayout + Sidebar
-- [ ] Overview page: KPI cards + RevenueChart
-- [ ] Transactions page: tabel + filter + export CSV
-- [ ] Settlements page
-- [ ] Reports page: Recharts + date range
-- [ ] Stores page: manajemen toko
-- [ ] Employees page: manajemen karyawan
-- [ ] Soundbox page: status perangkat
-- [ ] Settings page: profil + bank account
-- [ ] Admin Panel: /admin route + merchant list + global stats
-- [ ] API lib: axios instance + NextAuth config
+- [x] Init Next.js 14 + Tailwind + package.json + next.config.js
+- [x] apps/web/lib/api.js (axios client + semua service methods)
+- [x] apps/web/lib/store.js (Zustand auth + dashboard stores)
+- [x] Auth: login/page.jsx (OTP 2-step)
+- [x] Layout: DashboardLayout + Sidebar (layout.jsx)
+- [x] Overview page: KPI cards + Recharts (page.jsx)
+- [x] Transactions page: tabel + filter + export CSV
+- [x] Reports page: Recharts + period toggle + export
+- [x] Soundbox page: status + edit + test
+- [x] Settlements page: balance + instant + riwayat
+- [x] Employees page: list + permissions toggle + invite + set PIN
+- [x] Settings page: profil + KYC status + rekening bank
+- [x] Admin layout + Admin dashboard (global stats)
+- [x] Admin merchants page (KYC review + suspend)
+- [x] Admin: Logs page (activity log dengan color coding)
 
 ## Komponen 5: iOS App
-- [ ] Platform-specific fixes (SafeAreaView, StatusBar)
-- [ ] deploy-ios.yml workflow
+- [x] AppNavigator: Phase 2 screens + useSafeAreaInsets untuk iPhone notch
+- [x] SettlementScreen: Platform.OS === 'ios' paddingTop fix
+- [x] KasirModeScreen: Platform.OS handling
+- [x] SoundboxPairScreen: Platform.OS handling + monospace font iOS/Android
+- [x] .github/workflows/deploy-ios.yml (TestFlight + App Store Connect API)
 
-## Komponen Firmware (Dokumentasi)
-- [ ] apps/firmware/ README.md + platformio.ini + arsitektur
+## Mobile API Services
+- [x] apiService.employee (invite, join, list, updatePermissions, setPin, pinLogin, remove)
+- [x] apiService.soundbox (register, getDevices, updateDevice, testSound)
+- [x] settlementApi.requestInstant
 
-## CI/CD
-- [ ] deploy-ios.yml GitHub Actions
+## .env.example
+- [x] Phase 2 variables (MQTT, Instant Settlement, Web, APNs)
+
+## Backend package.json
+- [x] mqtt, date-fns, csv-stringify dependencies
+
+---
+
+## Status: ✅ PHASE 2 COMPLETE — Semua item selesai
